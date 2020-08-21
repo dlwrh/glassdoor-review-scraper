@@ -3,6 +3,8 @@ main.py
 ----------
 Matthew Chatham
 June 6, 2018
+Revised by Ruihan Wang
+April 2020
 
 Given a company's landing page on Glassdoor and an output filename, scrape the
 following information about each employee review:
@@ -19,6 +21,9 @@ Cons text
 Advice to mgmttext
 Ratings for each of 5 categories
 Overall rating
+recommends,
+outlook,
+opinion_of_ceo
 '''
 
 import time
@@ -152,12 +157,60 @@ def scrape(field, review, author):
         return review.find_element_by_class_name('summary').text.strip('"')
 
     def scrape_years(review):
-        res = review.find_element_by_class_name('common__EiReviewTextStyles__allowLineBreaks').find_element_by_xpath('preceding-sibling::p').text
+        # first_par = review.find_element_by_class_name(
+        #     'reviewBodyCell').find_element_by_tag_name('p')
+        # if '(' in first_par.text:
+        #     res = first_par.text[first_par.text.find('(') + 1:-1]
+        # else:
+        #     res = np.nan
+        try:
+            res = review.find_element_by_class_name("mainText.mb-0").text
+        except Exception:
+            res = np.nan
         return res
+    
+    def scrape_recommend(review):
+        try:
+            bodycell = review.find_element_by_class_name("row.reviewBodyCell.recommends")
+            res = bodycell.find_elements_by_tag_name("span")
+            for ele in res:
+                txt = ele.text
+                if "Recommend" in txt:
+                    return txt
+            return np.nan
+        except Exception:
+            return np.nan
+        
+
+    def scrape_outlook(review):
+        try:
+            bodycell = review.find_element_by_class_name("row.reviewBodyCell.recommends")
+            res = bodycell.find_elements_by_tag_name("span")
+            for ele in res:
+                txt = ele.text
+                if "Outlook" in txt:
+                    return txt
+            return np.nan
+        except Exception:
+            return np.nan
+ 
+
+    def scrape_ceo(review):
+        try:
+            bodycell = review.find_element_by_class_name("row.reviewBodyCell.recommends")
+            res = bodycell.find_elements_by_tag_name("span")
+            for ele in res:
+                txt = ele.text
+                if "CEO" in txt:
+                    return txt
+            return np.nan            
+        except Exception:
+            return np.nan
+
 
     def scrape_helpful(review):
         try:
-            helpful = review.find_element_by_class_name('helpfulCount')
+            helpful = review.find_element_by_class_name('helpfulCount').text
             res = helpful[helpful.find('(') + 1: -1]
         except Exception:
             res = 0
@@ -166,36 +219,51 @@ def scrape(field, review, author):
     def expand_show_more(section):
         try:
             # more_content = section.find_element_by_class_name('moreContent')
-            more_link = section.find_element_by_class_name('v2__EIReviewDetailsV2__continueReading')
+            # more_link = more_content.find_element_by_class_name('moreLink')
+            more_link = section.find_element_by_class_name("v2__EIReviewDetailsV2__continueReading.v2__EIReviewDetailsV2__clickable")
             more_link.click()
         except Exception:
             pass
 
+    def scrape_pros_cons_advice(review):
+        try:
+            expand_show_more(review)
+            contents = review.find_elements_by_class_name("v2__EIReviewDetailsV2__fullWidth")
+            results = dict([ [x.text for x in el.find_elements_by_tag_name("p")] for el in contents])
+            return [ele for ele in results if len(ele) == 2]
+        except:
+            return np.nan
+
+
     def scrape_pros(review):
         try:
-            pros = review.find_element_by_class_name('common__EiReviewTextStyles__allowLineBreaks')
-            expand_show_more(pros)
-            res = pros.text.replace('Pros', '')
-            res = res.strip()
+            expand_show_more(review)
+            #res = scrape_pros_cons_advice(review)["Pros"]
+            pros = review.find_elements_by_class_name("v2__EIReviewDetailsV2__fullWidth")[0]
+            res = pros.find_elements_by_tag_name("p")[1].text
         except Exception:
             res = np.nan
         return res
 
     def scrape_cons(review):
         try:
-            cons = review.find_elements_by_class_name('common__EiReviewTextStyles__allowLineBreaks')[1]
-            expand_show_more(cons)
-            res = cons.text.replace('Cons', '')
-            res = res.strip()
+            #res = scrape_pros_cons_advice(review)["Cons"]
+            expand_show_more(review)
+            #res = cons.text.replace('\nShow Less', '')
+            cons = review.find_elements_by_class_name("v2__EIReviewDetailsV2__fullWidth")[1]
+            res = cons.find_elements_by_tag_name("p")[1].text
         except Exception:
             res = np.nan
         return res
 
     def scrape_advice(review):
         try:
-            advice = review.find_elements_by_class_name('common__EiReviewTextStyles__allowLineBreaks')[2]
-            res = advice.text.replace('Advice to Management', '')
-            res = res.strip()
+            # advice = review.find_element_by_class_name('adviceMgmt')
+            expand_show_more(review)
+            # res = advice.text.replace('\nShow Less', '')
+            #res = scrape_pros_cons_advice(review)["Advice to Management"]
+            advice = review.find_elements_by_class_name("v2__EIReviewDetailsV2__fullWidth")[2]
+            res = advice.find_elements_by_tag_name("p")[1].text
         except Exception:
             res = np.nan
         return res
@@ -238,40 +306,6 @@ def scrape(field, review, author):
         return _scrape_subrating(4)
 
 
-    def scrape_recommends(review):
-        try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            return res[0]
-        except:
-            return np.nan
-    
-    def scrape_outlook(review):
-        try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            if len(res) == 2 or len(res) == 3:
-                if 'CEO' in res[1]:
-                    return np.nan
-                return res[1]
-            return np.nan
-        except:
-            return np.nan
-    
-    def scrape_approve_ceo(review):
-        try:
-            res = review.find_element_by_class_name('recommends').text
-            res = res.split('\n')
-            if len(res) == 3:
-                return res[2]
-            if len(res) == 2:
-                if 'CEO' in res[1]:
-                    return res[1]
-            return np.nan
-        except:
-            return np.nan
-
-
     funcs = [
         scrape_date,
         scrape_emp_title,
@@ -289,10 +323,9 @@ def scrape(field, review, author):
         scrape_career_opportunities,
         scrape_comp_and_benefits,
         scrape_senior_management,
-        scrape_recommends,
+        scrape_recommend,
         scrape_outlook,
-        scrape_approve_ceo
-
+        scrape_ceo
     ]
 
     fdict = dict((s, f) for (s, f) in zip(SCHEMA, funcs))
@@ -347,20 +380,21 @@ def extract_from_page():
 
 
 def more_pages():
+    #paging_control = browser.find_element_by_class_name('pagination__PaginationStyle__next')
+    #next_ = paging_control.find_element_by_class_name('next')
     try:
-        # paging_control = browser.find_element_by_class_name('pagingControls')
-        next_ = browser.find_element_by_class_name('pagination__PaginationStyle__next')
-        next_.find_element_by_tag_name('a')
-        return True
-    except selenium.common.exceptions.NoSuchElementException:
+        next_ = browser.find_element_by_class_name('pagination__ArrowStyle__nextArrow.pagination__ArrowStyle__disabled')
+        #next_.find_element_by_tag_name('a')
         return False
+    except selenium.common.exceptions.NoSuchElementException:
+        return True
 
 
 def go_to_next_page():
     logger.info(f'Going to page {page[0] + 1}')
-    # paging_control = browser.find_element_by_class_name('pagingControls')
-    next_ = browser.find_element_by_class_name(
-        'pagination__PaginationStyle__next').find_element_by_tag_name('a')
+    next_ = browser.find_element_by_class_name('pagination__ArrowStyle__nextArrow')
+    # next_ = paging_control.find_element_by_class_name(
+    #     'next').find_element_by_tag_name('a')
     browser.get(next_.get_attribute('href'))
     time.sleep(1)
     page[0] = page[0] + 1
@@ -381,13 +415,13 @@ def navigate_to_reviews():
         logger.info('No reviews to scrape. Bailing!')
         return False
 
-    reviews_cell = browser.find_element_by_xpath(
-        '//a[@data-label="Reviews"]')
+    # reviews_cell = browser.find_element_by_xpath(
+    #     "//*[@id='EmpLinksWrapper']/div//a[2]")
+    reviews_cell = browser.find_element_by_class_name("eiCell.cell.reviews")
     reviews_path = reviews_cell.get_attribute('href')
-    
-    # reviews_path = driver.current_url.replace('Overview','Reviews')
     browser.get(reviews_path)
     time.sleep(1)
+
     return True
 
 
@@ -407,9 +441,7 @@ def sign_in():
     password_field.send_keys(args.password)
     submit_btn.click()
 
-    time.sleep(3)
-    browser.get(args.url)
-
+    time.sleep(1)
 
 
 def get_browser():
@@ -418,20 +450,21 @@ def get_browser():
     if args.headless:
         chrome_options.add_argument('--headless')
     chrome_options.add_argument('log-level=3')
-    browser = wd.Chrome(options=chrome_options)
+    browser = wd.Chrome(options=chrome_options, executable_path="./chromedriver")
     return browser
 
 
 def get_current_page():
     logger.info('Getting current page number')
-    paging_control = browser.find_element_by_class_name('pagingControls')
-    current = int(paging_control.find_element_by_xpath(
-        '//ul//li[contains\
-        (concat(\' \',normalize-space(@class),\' \'),\' current \')]\
-        //span[contains(concat(\' \',\
-        normalize-space(@class),\' \'),\' disabled \')]')
-        .text.replace(',', ''))
-    return current
+    # paging_control = browser.find_element_by_class_name('pagingControls')
+    # current = int(paging_control.find_element_by_xpath(
+    #     '//ul//li[contains\
+    #     (concat(\' \',normalize-space(@class),\' \'),\' current \')]\
+    #     //span[contains(concat(\' \',\
+    #     normalize-space(@class),\' \'),\' disabled \')]')
+    #     .text.replace(',', ''))
+    current  = browser.find_element_by_class_name("pagination__PaginationStyle__page.pagination__PaginationStyle__current").text
+    return int(current)
 
 
 def verify_date_sorting():
@@ -485,9 +518,12 @@ def main():
     while more_pages() and\
             len(res) < args.limit and\
             not date_limit_reached[0]:
-        go_to_next_page()
-        reviews_df = extract_from_page()
-        res = res.append(reviews_df)
+        try:
+            go_to_next_page()
+            reviews_df = extract_from_page()
+            res = res.append(reviews_df)
+        except:
+            break
 
     logger.info(f'Writing {len(res)} reviews to file {args.file}')
     res.to_csv(args.file, index=False, encoding='utf-8')
